@@ -8,8 +8,8 @@ use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
-use crate::server::{error_result, text_result};
 use crate::server::AacServer;
+use crate::server::{error_result, text_result};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct InspectParams {
@@ -56,7 +56,11 @@ async fn inspect_handler(Parameters(params): Parameters<InspectParams>) -> CallT
     let signals = detect_signals(path);
 
     let onboarding_status = if project_yaml_exists {
-        if is_drift(&project_yaml_path) { "DRIFT" } else { "ONBOARDED" }
+        if is_drift(&project_yaml_path) {
+            "DRIFT"
+        } else {
+            "ONBOARDED"
+        }
     } else {
         "NOT_ONBOARDED"
     };

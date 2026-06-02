@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::bundle;
-use crate::server::{error_result, text_result};
+use crate::assets;
 use crate::server::AacServer;
+use crate::server::{error_result, text_result};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ConfigureParams {
@@ -53,8 +53,20 @@ async fn configure_handler(Parameters(params): Parameters<ConfigureParams>) -> C
     }
 
     match params.operation.as_str() {
-        "add-tech-stack" => add_tech_stack(path, &claude_dir, &project_yaml_path, &params.target, &params.project_path).await,
-        _ => error_result(format!("Unknown operation: {}. Supported: add-tech-stack", params.operation)),
+        "add-tech-stack" => {
+            add_tech_stack(
+                path,
+                &claude_dir,
+                &project_yaml_path,
+                &params.target,
+                &params.project_path,
+            )
+            .await
+        }
+        _ => error_result(format!(
+            "Unknown operation: {}. Supported: add-tech-stack",
+            params.operation
+        )),
     }
 }
 
@@ -66,16 +78,13 @@ async fn add_tech_stack(
     project_path: &str,
 ) -> CallToolResult {
     // Resolve stack content from bundle
-    let content = match bundle::stack_content(target) {
+    let content = match assets::stack_content(target) {
         Some(c) => c,
         None => {
-            let available = ["rust-1-95-mcp", "java-21-spring-boot", "angular-21", "react-19",
-                           "jpa-postgres", "github-actions", "pr-workflow", "cross-cutting",
-                           "atlassian", "figma", "github-issues", "product", "design"];
             return error_result(format!(
                 "No stack available for '{}'. Available: {}",
                 target,
-                available.join(", ")
+                assets::available_stacks().join(", ")
             ));
         }
     };
@@ -110,19 +119,22 @@ async fn add_tech_stack(
         let _ = fs::remove_file(&inspection_path);
     }
 
-    text_result(serde_json::to_string_pretty(&ConfigureResult {
-        project_path: project_path.to_string(),
-        operation: "add-tech-stack".to_string(),
-        target: target.to_string(),
-        next_steps: vec![
-            "Call scaffold_configure again to add another skill".to_string(),
-            "Done — open the project in Claude Code".to_string(),
-        ],
-        changes: vec![
-            format!(".claude/stacks/{target}.md written"),
-            format!("PROJECT.yaml updated — {target} added to {category}"),
-        ],
-    }).unwrap())
+    text_result(
+        serde_json::to_string_pretty(&ConfigureResult {
+            project_path: project_path.to_string(),
+            operation: "add-tech-stack".to_string(),
+            target: target.to_string(),
+            next_steps: vec![
+                "Call scaffold_configure again to add another skill".to_string(),
+                "Done — open the project in Claude Code".to_string(),
+            ],
+            changes: vec![
+                format!(".claude/stacks/{target}.md written"),
+                format!("PROJECT.yaml updated — {target} added to {category}"),
+            ],
+        })
+        .unwrap(),
+    )
 }
 
 fn stack_category(name: &str) -> &'static str {

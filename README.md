@@ -4,44 +4,53 @@ Reusable framework that onboards any project into an agentic development workflo
 
 ---
 
-## What It Does
+## Two Ways to Scaffold
 
-AAC scaffolds a project's Claude setup based on its tech-stack and your role. Run it once on any project and get:
+This repo provides two entry points that produce the same output.
 
-- A tailored `CLAUDE.md` with the right workflow for your persona
-- Stack convention files in `.claude/stacks/`
-- Agent definitions (multi-agent mode)
-- Session continuity files
+### Option 1 — MCP Server
+
+The MCP server exposes three tools that any Claude Code session can call — no need to open this repo.
+
+Install:
+```bash
+curl -fsSL https://raw.githubusercontent.com/javadbayzavi/acc/main/install.sh | sh
+```
+
+Register once:
+```bash
+claude mcp add --scope user 3t-scaffold ~/.3t-scaffold/bin/3t-scaffold-mcp
+```
+
+Then from any project, any Claude Code session:
+> "Use scaffold_inspect on this project"
+
+Claude collects your persona and mode, calls the tools, and writes everything to your project.
+
+**How it works:** the binary installs to `~/.3t-scaffold/bin/` and on startup clones this repo to `~/.3t-scaffold/repo/`, reading templates and stacks from there at runtime — always up to date.
 
 ---
 
-## How to Use
-
-### Option 1 — MCP Server (recommended)
-
-Install the binary:
-
-```bash
-brew install javadbayzavi/tap/3t-scaffold-mcp
-# or
-cargo install --git https://github.com/javadbayzavi/aac 3t-scaffold-mcp
-```
-
-Register with Claude Code:
-
-```bash
-claude mcp add --scope user 3t-scaffold 3t-scaffold-mcp
-```
-
-Then in any Claude Code session:
-
-> "Use scaffold_inspect on this project"
-
-Claude will ask for your project path, description, persona, and mode — then scaffold everything automatically.
-
 ### Option 2 — Claude Code (this repo)
 
-Open this repo in Claude Code. The `CLAUDE.md` drives the Inspector → Onboarding → Configurator workflow interactively.
+Open this repo directly in Claude Code. `CLAUDE.md` drives the same Inspector → Onboarding → Configurator workflow interactively using Claude's native conversation and `AskUserQuestion` prompts.
+
+No binary needed. Claude reads the workflow files and follows them step by step.
+
+---
+
+## What Gets Written to Your Project
+
+```
+<project>/
+├── CLAUDE.md                        # Tailored workflow for your persona + mode
+└── .claude/
+    ├── PROJECT.yaml                 # Project metadata and tech-stack
+    ├── stacks/                      # Stack convention files (one per detected tech)
+    ├── protocols/FEATURE_PLAN.json  # Feature plan schema (developer only)
+    ├── active-plan.json             # Session continuity
+    └── agents/                      # Agent definitions (multi-agent mode only)
+```
 
 ---
 
@@ -66,10 +75,12 @@ Open this repo in Claude Code. The `CLAUDE.md` drives the Inspector → Onboardi
 | Security | `cross-cutting` |
 | Collaboration | `atlassian`, `figma`, `github-issues`, `product`, `design` |
 
+---
+
 ## MCP Tools
 
-| Tool | Description |
+| Tool | Equivalent workflow |
 |---|---|
-| `scaffold_inspect` | Detects onboarding status and tech-stack signals |
-| `scaffold_onboard` | Writes CLAUDE.md, PROJECT.yaml, and stacks |
-| `scaffold_configure` | Adds or removes skills from an onboarded project |
+| `scaffold_inspect` | Inspector role in `CLAUDE.md` |
+| `scaffold_onboard` | `.claude/workflows/onboarding-discovery.md` |
+| `scaffold_configure` | `.claude/workflows/project-configurator.md` |

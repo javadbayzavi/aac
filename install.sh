@@ -3,7 +3,7 @@ set -e
 
 REPO="https://github.com/javadbayzavi/aac"
 BINARY="3t-scaffold-mcp"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/.3t-scaffold/bin"
 
 echo "Installing $BINARY..."
 
@@ -30,11 +30,8 @@ curl -fsSL "$DOWNLOAD_URL" -o "/tmp/$BINARY"
 chmod +x "/tmp/$BINARY"
 
 # Install
-if [ -w "$INSTALL_DIR" ]; then
-  mv "/tmp/$BINARY" "$INSTALL_DIR/$BINARY"
-else
-  sudo mv "/tmp/$BINARY" "$INSTALL_DIR/$BINARY"
-fi
+mkdir -p "$INSTALL_DIR"
+mv "/tmp/$BINARY" "$INSTALL_DIR/$BINARY"
 
 echo "$BINARY installed to $INSTALL_DIR/$BINARY"
 

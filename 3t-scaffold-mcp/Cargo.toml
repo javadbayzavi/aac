@@ -17,5 +17,6 @@ serde_json = { version = "1.0" }
 schemars = "1.2"
 anyhow = "1.0"
 thiserror = "2.0"
+dirs = "6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

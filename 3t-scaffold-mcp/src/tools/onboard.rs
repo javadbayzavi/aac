@@ -8,9 +8,9 @@ use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
 
-use crate::bundle;
-use crate::server::{error_result, text_result};
+use crate::assets;
 use crate::server::AacServer;
+use crate::server::{error_result, text_result};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct OnboardParams {
@@ -33,7 +33,7 @@ pub fn onboard_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_onboard",
         Some(std::borrow::Cow::Borrowed(
-            "Onboard a project into the agentic workflow. Only call this after scaffold_inspect has been called AND the user has explicitly confirmed they want to proceed. If CLAUDE.md already exists, ask: Overwrite / Backup and overwrite / Cancel before calling.",
+            "Onboard a project into the agentic workflow. Only call after scaffold_inspect AND user confirmation. If CLAUDE.md exists, ask: Overwrite / Backup / Cancel before calling.",
         )),
         schema_for_type::<OnboardParams>(),
     );
@@ -63,66 +63,82 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         return error_result("Project already onboarded. Use scaffold_configure for changes.");
     }
 
-    // Warn about existing CLAUDE.md — Claude must have asked user before calling this
     let claude_md_existed = path.join("CLAUDE.md").exists();
-
-    let persona = inspection["persona"].as_str().unwrap_or("developer").to_string();
+    let persona = inspection["persona"]
+        .as_str()
+        .unwrap_or("developer")
+        .to_string();
     let mode = inspection["mode"].as_str().unwrap_or("solo").to_string();
-    let project_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let project_name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
     let description = inspection["description"].as_str().unwrap_or("").to_string();
     let signals: Vec<String> = inspection["tech_stack_signals"]
         .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut files_written: Vec<String> = vec![];
     let mut skills_injected: Vec<String> = vec![];
-    let skipped: Vec<String> = vec![];
+    let mut skipped: Vec<String> = vec![];
 
-    // Create .claude dirs
     for dir in &["stacks", "protocols"] {
         if let Err(e) = fs::create_dir_all(claude_dir.join(dir)) {
             return error_result(format!("Failed to create .claude/{dir}: {e}"));
         }
     }
 
-    // Detect and write stacks
-    let detected = bundle::detect_stacks(&signals);
+    // Write detected stacks
+    let detected = assets::detect_stacks(&signals);
     for stack_name in &detected {
-        if let Some(content) = bundle::stack_content(stack_name) {
-            let dest = claude_dir.join("stacks").join(format!("{stack_name}.md"));
-            if let Err(e) = fs::write(&dest, content) {
-                return error_result(format!("Failed to write stack {stack_name}: {e}"));
+        match assets::stack_content(stack_name) {
+            Some(content) => {
+                let dest = claude_dir.join("stacks").join(format!("{stack_name}.md"));
+                if let Err(e) = fs::write(&dest, &content) {
+                    return error_result(format!("Failed to write stack {stack_name}: {e}"));
+                }
+                skills_injected.push(stack_name.to_string());
+                files_written.push(format!(".claude/stacks/{stack_name}.md"));
             }
+            None => skipped.push(stack_name.to_string()),
+        }
+    }
+
+    // Persona-specific stacks
+    let persona_stacks: &[&str] = match persona.as_str() {
+        "product-manager" => &["product", "atlassian"],
+        "designer" => &["design", "figma"],
+        _ => &[],
+    };
+    for stack_name in persona_stacks {
+        if let Some(content) = assets::stack_content(stack_name) {
+            let _ = fs::write(
+                claude_dir.join("stacks").join(format!("{stack_name}.md")),
+                &content,
+            );
             skills_injected.push(stack_name.to_string());
             files_written.push(format!(".claude/stacks/{stack_name}.md"));
         }
     }
 
-    // Persona-specific stacks
-    match persona.as_str() {
-        "product-manager" => {
-            let _ = fs::write(claude_dir.join("stacks/product.md"), bundle::STACK_PRODUCT);
-            let _ = fs::write(claude_dir.join("stacks/atlassian.md"), bundle::STACK_ATLASSIAN);
-            skills_injected.extend(["product".into(), "atlassian".into()]);
-            files_written.extend([".claude/stacks/product.md".into(), ".claude/stacks/atlassian.md".into()]);
-        }
-        "designer" => {
-            let _ = fs::write(claude_dir.join("stacks/design.md"), bundle::STACK_DESIGN);
-            let _ = fs::write(claude_dir.join("stacks/figma.md"), bundle::STACK_FIGMA);
-            skills_injected.extend(["design".into(), "figma".into()]);
-            files_written.extend([".claude/stacks/design.md".into(), ".claude/stacks/figma.md".into()]);
-        }
-        _ => {}
-    }
-
-    // Write PROJECT.yaml
+    // PROJECT.yaml
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_default();
 
-    let project_yaml = bundle::PROJECT_YAML
+    let project_yaml = match assets::project_yaml_template() {
+        Ok(t) => t,
+        Err(e) => return error_result(format!("Failed to read PROJECT.yaml template: {e}")),
+    };
+
+    let project_yaml = project_yaml
         .replace("{{ project_name }}", &project_name)
         .replace("{{ project_description }}", &description)
         .replace("{{ project_path }}", &params.project_path)
@@ -133,11 +149,20 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         .replace("{{ operator_notes }}", "")
         .replace("{{ onboarded_at }}", &now)
         .replace("{{ default_model }}", "claude-sonnet-4-6")
-        .replace("{{ backend_skill }}", skills_injected.first().map(String::as_str).unwrap_or("none"))
+        .replace(
+            "{{ backend_skill }}",
+            skills_injected
+                .first()
+                .map(String::as_str)
+                .unwrap_or("none"),
+        )
         .replace("{{ frontend_skill }}", "none")
         .replace("{{ persistence_skill }}", "none")
         .replace("{{ branching_model }}", "trunk")
-        .replace("{{ commit_pattern }}", "feat|fix|docs|style|refactor|test|chore")
+        .replace(
+            "{{ commit_pattern }}",
+            "feat|fix|docs|style|refactor|test|chore",
+        )
         .replace("{{ pr_template }}", "standard")
         .replace("{{ issue_tracker }}", "github-projects")
         .replace("{{ docs_tool }}", "confluence")
@@ -151,13 +176,11 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
     }
     files_written.push(".claude/PROJECT.yaml".into());
 
-    // Write CLAUDE.md
+    // CLAUDE.md
     let tech_stack_list = skills_injected.join(", ");
-    let claude_template = match (persona.as_str(), mode.as_str()) {
-        ("product-manager", _) => bundle::CLAUDE_PM_SOLO,
-        ("designer", _) => bundle::CLAUDE_DESIGNER_SOLO,
-        (_, "multi-agent") => bundle::CLAUDE_MULTI_AGENT,
-        _ => bundle::CLAUDE_SOLO,
+    let claude_template = match assets::claude_template(&persona, &mode) {
+        Ok(t) => t,
+        Err(e) => return error_result(format!("Failed to read CLAUDE template: {e}")),
     };
 
     let claude_md = claude_template
@@ -193,52 +216,60 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
     files_written.push("CLAUDE.md".into());
 
     // Session continuity
-    let (session_name, session_content) = match persona.as_str() {
-        "product-manager" => ("active-sprint.json", bundle::ACTIVE_SPRINT),
-        "designer" => ("active-design.json", bundle::ACTIVE_DESIGN),
-        _ => ("active-plan.json", bundle::ACTIVE_PLAN),
-    };
-    let _ = fs::write(claude_dir.join(session_name), session_content);
-    files_written.push(format!(".claude/{session_name}"));
-
-    // FEATURE_PLAN for developer
-    if persona == "developer" {
-        let _ = fs::write(claude_dir.join("protocols/FEATURE_PLAN.json"), bundle::FEATURE_PLAN);
-        files_written.push(".claude/protocols/FEATURE_PLAN.json".into());
+    let (session_name, session_src) = assets::session_file(&persona);
+    if let Ok(content) = fs::read_to_string(&session_src) {
+        let _ = fs::write(claude_dir.join(session_name), content);
+        files_written.push(format!(".claude/{session_name}"));
     }
 
-    // Agents for multi-agent developer
+    // FEATURE_PLAN
+    if persona == "developer" {
+        if let Ok(content) = assets::feature_plan() {
+            let _ = fs::write(claude_dir.join("protocols/FEATURE_PLAN.json"), content);
+            files_written.push(".claude/protocols/FEATURE_PLAN.json".into());
+        }
+    }
+
+    // Multi-agent agents
     if mode == "multi-agent" && persona == "developer" {
         let _ = fs::create_dir_all(claude_dir.join("agents"));
-        let agents = [
-            ("orchestrator", bundle::AGENT_ORCHESTRATOR),
-            ("product-ai-engineer", bundle::AGENT_PRODUCT_AI),
-            ("backend-developer", bundle::AGENT_BACKEND),
-            ("frontend-developer", bundle::AGENT_FRONTEND),
-            ("devops-engineer", bundle::AGENT_DEVOPS),
-        ];
-        for (name, template) in &agents {
-            let content = resolve_agent_template(template, &skills_injected, &project_name);
-            let _ = fs::write(claude_dir.join("agents").join(format!("{name}.md")), content);
-            files_written.push(format!(".claude/agents/{name}.md"));
+        for name in &[
+            "orchestrator",
+            "product-ai-engineer",
+            "backend-developer",
+            "frontend-developer",
+            "devops-engineer",
+        ] {
+            if let Ok(template) = assets::agent_template(name) {
+                let content = resolve_agent_template(&template, &skills_injected, &project_name);
+                let _ = fs::write(
+                    claude_dir.join("agents").join(format!("{name}.md")),
+                    content,
+                );
+                files_written.push(format!(".claude/agents/{name}.md"));
+            }
         }
     }
 
     let _ = fs::remove_file(&inspection_path);
 
-    text_result(serde_json::to_string_pretty(&OnboardResult {
-        project_path: params.project_path,
-        claude_md_overwritten: claude_md_existed,
-        next_steps: vec![
-            "Call scaffold_configure to add more skills or agents".to_string(),
-            "Done — open the project in Claude Code, CLAUDE.md will load automatically".to_string(),
-        ],
-        persona,
-        mode,
-        files_written,
-        skills_injected,
-        skipped,
-    }).unwrap())
+    text_result(
+        serde_json::to_string_pretty(&OnboardResult {
+            project_path: params.project_path,
+            persona,
+            mode,
+            files_written,
+            skills_injected,
+            skipped,
+            claude_md_overwritten: claude_md_existed,
+            next_steps: vec![
+                "Call scaffold_configure to add more skills or agents".to_string(),
+                "Done — open the project in Claude Code, CLAUDE.md will load automatically"
+                    .to_string(),
+            ],
+        })
+        .unwrap(),
+    )
 }
 
 fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str) -> String {
@@ -255,7 +286,7 @@ fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str)
         let placeholder = format!("{{{{include stacks/{category}.md}}}}");
         let content: String = stacks
             .iter()
-            .filter_map(|s| bundle::stack_content(s))
+            .filter_map(|s| assets::stack_content(s))
             .collect::<Vec<_>>()
             .join("\n\n---\n\n");
         result = result.replace(&placeholder, &content);
