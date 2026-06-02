@@ -1,0 +1,6 @@
+3t-scaffold-mcp/target/
+.idea/
+.DS_Store
+scaffold-tests/
+docs/
+STRUCTURE.md

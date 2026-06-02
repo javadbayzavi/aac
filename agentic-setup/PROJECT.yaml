@@ -1,0 +1,61 @@
+project:
+  name: {{ project_name }}
+  description: {{ project_description }}
+  path: {{ project_path }}
+  persona: {{ persona }}          # developer | product-manager | designer
+  mode: {{ mode }}                # solo | multi-agent
+  status: {{ status }}            # agents_pending | claude_md_pending | complete
+  onboarded_at: {{ onboarded_at }}  # ISO date set by Onboarding when status → complete
+  lead: {{ project_lead }}        # name or handle of the person who approves plans
+  operator_notes: {{ operator_notes }}  # optional free-text notes injected into CLAUDE.md
+
+# --- multi-agent only ---
+# Model and effort per sub-agent. Ignored in solo mode.
+agents:
+  orchestrator:
+    model: claude-sonnet-4-6
+    effort: low
+  product-ai-engineer:
+    model: claude-sonnet-4-6
+    effort: medium
+  backend-developer:
+    model: claude-opus-4-8
+    effort: medium
+  frontend-developer:
+    model: claude-sonnet-4-6
+    effort: medium
+  devops-engineer:
+    model: claude-sonnet-4-6
+    effort: medium
+
+# --- developer only ---
+# Each category is a list — supports multiple stacks per category (e.g. two backends)
+tech_stack:
+  backend:
+    - {{ backend_skill }}         # e.g., java-21-spring-boot, rust-1-95-mcp
+  frontend:
+    - {{ frontend_skill }}        # e.g., angular-21, react-19
+  persistence:
+    - {{ persistence_skill }}     # e.g., jpa-postgres
+  devops:
+    - github-actions              # always included
+    - pr-workflow                 # always included
+  security:
+    - cross-cutting               # always included
+
+git:
+  branching_model: {{ branching_model }}  # trunk | feature | gitflow
+  commit_pattern: {{ commit_pattern }}    # e.g., "feat|fix|docs|style|refactor|test|chore"
+  pr_template: {{ pr_template }}          # standard | custom
+
+# --- product-manager only ---
+pm_tools:
+  issue_tracker: {{ issue_tracker }}      # jira | linear | github-projects
+  docs: {{ docs_tool }}                   # confluence | notion | google-docs
+  board: {{ board_reference }}            # e.g., project URL or board name
+
+# --- designer only ---
+design_tools:
+  design: {{ design_tool }}              # figma | sketch | adobe-xd
+  handoff: {{ handoff_tool }}            # figma-dev | zeplin | storybook
+  component_library: {{ component_library }} # e.g., storybook URL or "none"

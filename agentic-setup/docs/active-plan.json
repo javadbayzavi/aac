@@ -1,0 +1,21 @@
+{
+  "issue": null,
+  "title": null,
+  "url": null,
+  "involves": [],
+  "current_role": null,
+  "status": null,
+  "phases": {
+    "BE Developer": {
+      "status": null,
+      "prs": [],
+      "tasks": []
+    },
+    "FE Developer": {
+      "status": null,
+      "prs": [],
+      "tasks": []
+    }
+  },
+  "acceptance_criteria": []
+}
