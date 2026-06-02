@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-const REPO_URL: &str = "https://github.com/javadbayzavi/acc.git";
+const REPO_URL: &str = "https://github.com/javadbayzavi/aac.git";
 
 pub fn cache_dir() -> PathBuf {
     dirs::home_dir()

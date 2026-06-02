@@ -14,7 +14,7 @@ The MCP server exposes three tools that any Claude Code session can call — no 
 
 Install:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/javadbayzavi/acc/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/javadbayzavi/aac/main/install.sh | sh
 ```
 
 Register once:
