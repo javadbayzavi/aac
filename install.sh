@@ -3,7 +3,7 @@ set -e
 
 REPO="https://github.com/javadbayzavi/aac"
 BINARY="3t-scaffold-mcp"
-INSTALL_DIR="$HOME/.3t-scaffold/bin"
+INSTALL_DIR="$HOME/.local/bin"
 
 echo "Installing $BINARY..."
 
