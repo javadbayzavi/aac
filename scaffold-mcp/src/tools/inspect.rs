@@ -10,6 +10,7 @@ use std::time::SystemTime;
 
 use crate::server::AacServer;
 use crate::server::{error_result, text_result};
+use crate::sync::agentic_setup_dir;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct InspectParams {
@@ -37,7 +38,7 @@ pub fn inspect_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_inspect",
         Some(std::borrow::Cow::Borrowed(
-            "Inspect a project to check its onboarding status. Before calling, you MUST collect ALL FOUR fields explicitly from the user — do not infer or skip any: (1) project_path — absolute path, (2) description — one or two sentences about what the project does, this is REQUIRED and must not be skipped, (3) persona — Developer / Product Manager / Designer, (4) mode — Solo / Multi-agent. After calling: present findings as a table, then YOU MUST call AskUserQuestion tool with the next_steps values as selectable options.",
+            "Inspect a project. IMPORTANT: Do NOT call this tool until you have collected ALL FOUR answers using AskUserQuestion: (1) project_path — absolute path, (2) description — what the project does, (3) persona — Developer / Product Manager / Designer, (4) mode — Solo / Multi-agent. Calling this tool without all four answers will fail. After calling: present findings as a table, then call AskUserQuestion with the next_steps options.",
         )),
         schema_for_type::<InspectParams>(),
     );
@@ -127,21 +128,50 @@ async fn inspect_handler(Parameters(params): Parameters<InspectParams>) -> CallT
     text_result(serde_json::to_string_pretty(&result).unwrap())
 }
 
+/// Drift means a template or stack source in the synced repo has been updated
+/// (e.g. via `git pull` on startup) after this project was onboarded. This
+/// approximates the markdown workflow's `find agentic-setup/ ... -newer
+/// PROJECT.yaml` by walking the synced source tree and comparing modification
+/// times against PROJECT.yaml — the binary's own mtime is irrelevant.
 fn is_drift(project_yaml: &Path) -> bool {
-    // Binary mtime > PROJECT.yaml mtime means stacks were updated and rebuilt since onboarding
-    let binary_mtime = std::env::current_exe()
-        .ok()
-        .and_then(|p| fs::metadata(p).ok())
-        .and_then(|m| m.modified().ok());
+    let yaml_mtime = match fs::metadata(project_yaml).and_then(|m| m.modified()) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
 
-    let yaml_mtime = fs::metadata(project_yaml)
-        .ok()
-        .and_then(|m| m.modified().ok());
+    newest_source_mtime(&agentic_setup_dir())
+        .map(|newest| newest > yaml_mtime)
+        .unwrap_or(false)
+}
 
-    match (binary_mtime, yaml_mtime) {
-        (Some(bin), Some(yaml)) => bin > yaml,
-        _ => false,
+/// Recursively find the most recent mtime among template sources (.md / .yaml /
+/// .json) under `dir`. Returns None if the directory is absent — e.g. the
+/// startup sync has not completed yet, in which case we report no drift.
+fn newest_source_mtime(dir: &Path) -> Option<SystemTime> {
+    let mut newest: Option<SystemTime> = None;
+    for entry in fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        match entry.file_type() {
+            Ok(ft) if ft.is_dir() => {
+                if let Some(t) = newest_source_mtime(&path) {
+                    newest = Some(newest.map_or(t, |cur| cur.max(t)));
+                }
+            }
+            Ok(_) => {
+                let is_source = matches!(
+                    path.extension().and_then(|e| e.to_str()),
+                    Some("md") | Some("yaml") | Some("json")
+                );
+                if is_source {
+                    if let Ok(t) = entry.metadata().and_then(|m| m.modified()) {
+                        newest = Some(newest.map_or(t, |cur| cur.max(t)));
+                    }
+                }
+            }
+            Err(_) => continue,
+        }
     }
+    newest
 }
 
 fn detect_signals(path: &Path) -> Vec<String> {

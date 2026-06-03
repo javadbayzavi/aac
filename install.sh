@@ -37,6 +37,6 @@ echo "$BINARY installed to $INSTALL_DIR/$BINARY"
 
 # Register with Claude Code
 echo "Registering MCP server with Claude Code..."
-claude mcp add --scope user scaffold "$BINARY" 2>/dev/null && \
+claude mcp add --scope user scaffold "$INSTALL_DIR/$BINARY" 2>/dev/null && \
   echo "MCP server registered. Restart Claude Code to use it." || \
-  echo "Could not register automatically. Run: claude mcp add --scope user scaffold $BINARY"
+  echo "Could not register automatically. Run: claude mcp add --scope user scaffold $INSTALL_DIR/$BINARY"

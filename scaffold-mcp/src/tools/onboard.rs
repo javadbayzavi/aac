@@ -26,6 +26,7 @@ pub struct OnboardResult {
     pub skills_injected: Vec<String>,
     pub skipped: Vec<String>,
     pub claude_md_overwritten: bool,
+    pub claude_md_backup: Option<String>,
     pub next_steps: Vec<String>,
 }
 
@@ -33,7 +34,7 @@ pub fn onboard_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_onboard",
         Some(std::borrow::Cow::Borrowed(
-            "Onboard a project into the agentic workflow. Only call after scaffold_inspect AND user confirmation. If CLAUDE.md exists, ask: Overwrite / Backup / Cancel before calling.",
+            "Onboard a project into the agentic workflow. Only call after scaffold_inspect AND user confirmation. After completing, YOU MUST call AskUserQuestion with these options: 'Configure this project now — add more skills' and 'Done — open the project in Claude Code'. Never present next steps as plain text.",
         )),
         schema_for_type::<OnboardParams>(),
     );
@@ -210,6 +211,20 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         .replace("{{design_tools.handoff}}", "figma-dev")
         .replace("{{design_tools.component_library}}", "none");
 
+    // Never directly replace an existing CLAUDE.md — preserve it as a timestamped
+    // backup before writing the generated one, so the original is never lost.
+    let mut claude_md_backup: Option<String> = None;
+    if claude_md_existed {
+        let backup_name = format!("CLAUDE.md.backup-{now}");
+        if let Err(e) = fs::rename(path.join("CLAUDE.md"), path.join(&backup_name)) {
+            return error_result(format!(
+                "Refusing to overwrite: failed to back up existing CLAUDE.md to {backup_name}: {e}"
+            ));
+        }
+        files_written.push(backup_name.clone());
+        claude_md_backup = Some(backup_name);
+    }
+
     if let Err(e) = fs::write(path.join("CLAUDE.md"), &claude_md) {
         return error_result(format!("Failed to write CLAUDE.md: {e}"));
     }
@@ -262,6 +277,7 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
             skills_injected,
             skipped,
             claude_md_overwritten: claude_md_existed,
+            claude_md_backup,
             next_steps: vec![
                 "Call scaffold_configure to add more skills or agents".to_string(),
                 "Done — open the project in Claude Code, CLAUDE.md will load automatically"

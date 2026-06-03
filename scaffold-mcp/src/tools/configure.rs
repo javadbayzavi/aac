@@ -34,7 +34,7 @@ pub fn configure_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_configure",
         Some(std::borrow::Cow::Borrowed(
-            "Add a tech-stack skill to an already-onboarded project. Writes the skill file to .claude/stacks/ and updates PROJECT.yaml. Supported operation: add-tech-stack.",
+            "Add a tech-stack skill to an already-onboarded project. Do NOT run scaffold_inspect first — go directly to this tool. Only needs project_path and target. Before calling, ask: (1) project path, (2) category via AskUserQuestion: Backend / Frontend / Persistence / DevOps / Collaboration, (3) specific skill via AskUserQuestion based on category — Backend: java-21-spring-boot, rust-1-95-mcp. Frontend: angular-21, react-19. Persistence: jpa-postgres. DevOps: github-actions, pr-workflow. Collaboration: atlassian, figma, github-issues, product, design. After calling, use AskUserQuestion: 'Add another skill' or 'Done'.",
         )),
         schema_for_type::<ConfigureParams>(),
     );
