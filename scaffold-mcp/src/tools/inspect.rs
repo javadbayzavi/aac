@@ -37,7 +37,7 @@ pub fn inspect_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_inspect",
         Some(std::borrow::Cow::Borrowed(
-            "Inspect a project to check its onboarding status. Before calling: ask the user for project_path, description, persona (Developer / Product Manager / Designer), and mode (Solo / Multi-agent) — never infer these. After calling: present findings as a table, then YOU MUST call AskUserQuestion tool with the next_steps values as selectable options. Do not present next_steps as plain text. Do not call any other tool until user selects an option.",
+            "Inspect a project to check its onboarding status. Before calling, you MUST collect ALL FOUR fields explicitly from the user — do not infer or skip any: (1) project_path — absolute path, (2) description — one or two sentences about what the project does, this is REQUIRED and must not be skipped, (3) persona — Developer / Product Manager / Designer, (4) mode — Solo / Multi-agent. After calling: present findings as a table, then YOU MUST call AskUserQuestion tool with the next_steps values as selectable options.",
         )),
         schema_for_type::<InspectParams>(),
     );

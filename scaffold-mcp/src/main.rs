@@ -40,6 +40,16 @@ async fn run() -> Result<()> {
         .init();
 
     let service = AacServer::new().serve(stdio()).await?;
+
+    tokio::spawn(async {
+        if let Err(e) = tokio::task::spawn_blocking(sync::sync)
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()))
+        {
+            tracing::warn!("sync failed (using cache if available): {e}");
+        }
+    });
+
     service.waiting().await?;
     Ok(())
 }
