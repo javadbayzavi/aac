@@ -1,0 +1,8 @@
+/Users/javad/Project/3T/aac/3t-scaffold-mcp/target/release/deps/errno-4cc6194b8aa0db3c.d: /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/lib.rs /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/unix.rs
+
+/Users/javad/Project/3T/aac/3t-scaffold-mcp/target/release/deps/liberrno-4cc6194b8aa0db3c.rlib: /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/lib.rs /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/unix.rs
+
+/Users/javad/Project/3T/aac/3t-scaffold-mcp/target/release/deps/liberrno-4cc6194b8aa0db3c.rmeta: /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/lib.rs /Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/unix.rs
+
+/Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/lib.rs:
+/Users/javad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/errno-0.3.14/src/unix.rs:

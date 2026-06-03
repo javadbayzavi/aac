@@ -1,0 +1,22 @@
+[package]
+name = "scaffold-mcp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[[bin]]
+name = "scaffold-mcp"
+path = "src/main.rs"
+
+[dependencies]
+rmcp = { version = "1.6", features = ["server", "macros", "schemars", "transport-io"] }
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "io-std", "signal"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+schemars = "1.2"
+anyhow = "1.0"
+thiserror = "2.0"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

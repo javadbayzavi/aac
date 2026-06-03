@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/javadbayzavi/aac/main/install.sh | 
 
 Register once:
 ```bash
-claude mcp add --scope user 3t-scaffold ~/.local/bin/3t-scaffold-mcp
+claude mcp add --scope user scaffold ~/.local/bin/scaffold-mcp
 ```
 
 Then from any project, any Claude Code session:
@@ -27,7 +27,7 @@ Then from any project, any Claude Code session:
 
 Claude collects your persona and mode, calls the tools, and writes everything to your project.
 
-**How it works:** the binary installs to `~/.local/bin/` and on startup clones this repo to `~/.3t-scaffold/repo/`, reading templates and stacks from there at runtime — always up to date.
+**How it works:** the binary installs to `~/.local/bin/` and on startup clones this repo to `~/.scaffold/repo/`, reading templates and stacks from there at runtime — always up to date.
 
 ---
 

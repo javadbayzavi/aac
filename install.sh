@@ -2,7 +2,7 @@
 set -e
 
 REPO="https://github.com/javadbayzavi/aac"
-BINARY="3t-scaffold-mcp"
+BINARY="scaffold-mcp"
 INSTALL_DIR="$HOME/.local/bin"
 
 echo "Installing $BINARY..."
@@ -37,6 +37,6 @@ echo "$BINARY installed to $INSTALL_DIR/$BINARY"
 
 # Register with Claude Code
 echo "Registering MCP server with Claude Code..."
-claude mcp add --scope user 3t-scaffold "$BINARY" 2>/dev/null && \
+claude mcp add --scope user scaffold "$BINARY" 2>/dev/null && \
   echo "MCP server registered. Restart Claude Code to use it." || \
-  echo "Could not register automatically. Run: claude mcp add --scope user 3t-scaffold $BINARY"
+  echo "Could not register automatically. Run: claude mcp add --scope user scaffold $BINARY"
