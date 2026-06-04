@@ -300,8 +300,11 @@ fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str)
 
     for category in &["backend", "frontend", "persistence", "devops", "security"] {
         let placeholder = format!("{{{{include stacks/{category}.md}}}}");
+        // Only inject skills that belong to THIS category — otherwise every
+        // include directive would receive the full concatenation of all skills.
         let content: String = stacks
             .iter()
+            .filter(|s| assets::stack_category(s) == *category)
             .filter_map(|s| assets::stack_content(s))
             .collect::<Vec<_>>()
             .join("\n\n---\n\n");

@@ -42,6 +42,20 @@ pub fn stack_path(name: &str) -> Option<&'static str> {
     }
 }
 
+/// Map a skill name to its tech_stack category, mirroring the stacks/ directory
+/// layout. Backends without a skill file yet (go-chi, python-django) still map
+/// to "backend". Collaboration skills fall through to "collaboration".
+pub fn stack_category(name: &str) -> &'static str {
+    match name {
+        "java-21-spring-boot" | "rust-1-95-mcp" | "go-chi" | "python-django" => "backend",
+        "angular-21" | "react-19" => "frontend",
+        "jpa-postgres" => "persistence",
+        "github-actions" | "pr-workflow" => "devops",
+        "cross-cutting" => "security",
+        _ => "collaboration",
+    }
+}
+
 pub fn available_stacks() -> Vec<&'static str> {
     vec![
         "java-21-spring-boot",
@@ -61,17 +75,47 @@ pub fn available_stacks() -> Vec<&'static str> {
 }
 
 pub fn detect_stacks(signals: &[String]) -> Vec<&'static str> {
+    let has = |name: &str| signals.iter().any(|s| s == name);
     let mut stacks = vec![];
-    if signals.iter().any(|s| s == "Cargo.toml") {
+
+    // --- backend ---
+    if has("Cargo.toml") {
         stacks.push("rust-1-95-mcp");
     }
-    if signals
-        .iter()
-        .any(|s| s == "pom.xml" || s == "build.gradle")
-    {
+    let is_java = has("pom.xml") || has("build.gradle");
+    if is_java {
         stacks.push("java-21-spring-boot");
     }
-    if signals.iter().any(|s| s == ".github") {
+    // Detected but no skill file exists yet — these flow through to `skipped`
+    // in the onboard handler (stack_content returns None), matching the
+    // markdown survey's "note as skipped, do not block" behaviour.
+    if has("go.mod") {
+        stacks.push("go-chi");
+    }
+    if has("requirements.txt") || has("pyproject.toml") {
+        stacks.push("python-django");
+    }
+
+    // --- frontend ---
+    // angular.json is an unambiguous Angular CLI marker; a Next.js config
+    // implies React. A bare package.json can't be disambiguated from file
+    // names alone (could be a Node backend, Vue, Svelte, …), so it is left
+    // for the user to add explicitly via scaffold_configure.
+    if has("angular.json") {
+        stacks.push("angular-21");
+    } else if has("next.config.js") || has("next.config.mjs") || has("next.config.ts") {
+        stacks.push("react-19");
+    }
+
+    // --- persistence ---
+    // A Java/Spring project shipping a docker-compose almost always backs onto
+    // a relational DB; jpa-postgres is the only persistence skill available.
+    if is_java && (has("docker-compose.yml") || has("docker-compose.yaml")) {
+        stacks.push("jpa-postgres");
+    }
+
+    // --- devops + security (always) ---
+    if has(".github") {
         stacks.push("github-actions");
     }
     stacks.push("pr-workflow");

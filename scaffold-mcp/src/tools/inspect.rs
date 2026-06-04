@@ -181,9 +181,14 @@ fn detect_signals(path: &Path) -> Vec<String> {
         "build.gradle",
         "go.mod",
         "package.json",
+        "angular.json",
+        "next.config.js",
+        "next.config.mjs",
+        "next.config.ts",
         "requirements.txt",
         "pyproject.toml",
         "docker-compose.yml",
+        "docker-compose.yaml",
         ".github",
     ]
     .iter()
