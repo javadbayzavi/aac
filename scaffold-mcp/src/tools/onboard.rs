@@ -152,13 +152,16 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         .replace("{{ default_model }}", "claude-sonnet-4-6")
         .replace(
             "{{ backend_skill }}",
-            skills_injected
-                .first()
-                .map(String::as_str)
-                .unwrap_or("none"),
+            &category_skills(&skills_injected, "backend"),
         )
-        .replace("{{ frontend_skill }}", "none")
-        .replace("{{ persistence_skill }}", "none")
+        .replace(
+            "{{ frontend_skill }}",
+            &category_skills(&skills_injected, "frontend"),
+        )
+        .replace(
+            "{{ persistence_skill }}",
+            &category_skills(&skills_injected, "persistence"),
+        )
         .replace("{{ branching_model }}", "trunk")
         .replace(
             "{{ commit_pattern }}",
@@ -286,6 +289,23 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         })
         .unwrap(),
     )
+}
+
+/// Render the injected skills for one tech_stack category as YAML list entries,
+/// preserving multiple skills per category (e.g. two backends). Returns "none"
+/// when nothing was injected for the category — the placeholder default. The
+/// separator keeps the template's 4-space list indentation for extra entries.
+fn category_skills(skills: &[String], category: &str) -> String {
+    let matches: Vec<&str> = skills
+        .iter()
+        .filter(|s| assets::stack_category(s) == category)
+        .map(String::as_str)
+        .collect();
+    if matches.is_empty() {
+        "none".to_string()
+    } else {
+        matches.join("\n    - ")
+    }
 }
 
 fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str) -> String {
