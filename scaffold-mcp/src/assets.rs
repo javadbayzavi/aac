@@ -169,3 +169,76 @@ pub fn session_file(persona: &str) -> (&'static str, PathBuf) {
 pub fn feature_plan() -> Result<String, String> {
     read("docs/FEATURE_PLAN.json")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sigs(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn always_includes_pr_workflow_and_security() {
+        let s = detect_stacks(&sigs(&[]));
+        assert!(s.contains(&"pr-workflow"));
+        assert!(s.contains(&"cross-cutting"));
+    }
+
+    #[test]
+    fn detects_rust_backend() {
+        assert!(detect_stacks(&sigs(&["Cargo.toml"])).contains(&"rust-1-95-mcp"));
+    }
+
+    #[test]
+    fn detects_java_and_jpa_with_compose() {
+        let s = detect_stacks(&sigs(&["pom.xml", "docker-compose.yml"]));
+        assert!(s.contains(&"java-21-spring-boot"));
+        assert!(s.contains(&"jpa-postgres"));
+    }
+
+    #[test]
+    fn jpa_requires_java_not_just_compose() {
+        assert!(!detect_stacks(&sigs(&["docker-compose.yml"])).contains(&"jpa-postgres"));
+    }
+
+    #[test]
+    fn detects_angular_but_not_react() {
+        let s = detect_stacks(&sigs(&["angular.json"]));
+        assert!(s.contains(&"angular-21"));
+        assert!(!s.contains(&"react-19"));
+    }
+
+    #[test]
+    fn detects_react_via_next_config() {
+        assert!(detect_stacks(&sigs(&["next.config.mjs"])).contains(&"react-19"));
+    }
+
+    #[test]
+    fn bare_package_json_picks_no_frontend() {
+        let s = detect_stacks(&sigs(&["package.json"]));
+        assert!(!s.contains(&"react-19"));
+        assert!(!s.contains(&"angular-21"));
+    }
+
+    #[test]
+    fn go_and_python_detected_but_have_no_skill_file() {
+        let s = detect_stacks(&sigs(&["go.mod", "pyproject.toml"]));
+        assert!(s.contains(&"go-chi"));
+        assert!(s.contains(&"python-django"));
+        // No skill file → onboard reports them as skipped, not injected.
+        assert!(stack_path("go-chi").is_none());
+        assert!(stack_path("python-django").is_none());
+    }
+
+    #[test]
+    fn stack_category_maps_each_layer() {
+        assert_eq!(stack_category("rust-1-95-mcp"), "backend");
+        assert_eq!(stack_category("go-chi"), "backend");
+        assert_eq!(stack_category("react-19"), "frontend");
+        assert_eq!(stack_category("jpa-postgres"), "persistence");
+        assert_eq!(stack_category("github-actions"), "devops");
+        assert_eq!(stack_category("cross-cutting"), "security");
+        assert_eq!(stack_category("atlassian"), "collaboration");
+    }
+}

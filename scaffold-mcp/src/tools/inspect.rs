@@ -162,10 +162,8 @@ fn newest_source_mtime(dir: &Path) -> Option<SystemTime> {
                     path.extension().and_then(|e| e.to_str()),
                     Some("md") | Some("yaml") | Some("json")
                 );
-                if is_source {
-                    if let Ok(t) = entry.metadata().and_then(|m| m.modified()) {
-                        newest = Some(newest.map_or(t, |cur| cur.max(t)));
-                    }
+                if is_source && let Ok(t) = entry.metadata().and_then(|m| m.modified()) {
+                    newest = Some(newest.map_or(t, |cur| cur.max(t)));
                 }
             }
             Err(_) => continue,
