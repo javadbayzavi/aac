@@ -106,8 +106,8 @@ async fn add_tech_stack(
         Err(e) => return error_result(format!("Failed to read PROJECT.yaml: {e}")),
     };
 
-    let category = stack_category(target);
-    let updated_yaml = append_to_tech_stack(yaml_content, category, target);
+    let category = assets::stack_category(target);
+    let (updated_yaml, changed) = append_to_tech_stack(&yaml_content, category, target);
 
     if let Err(e) = fs::write(project_yaml_path, &updated_yaml) {
         return error_result(format!("Failed to update PROJECT.yaml: {e}"));
@@ -130,36 +130,69 @@ async fn add_tech_stack(
             ],
             changes: vec![
                 format!(".claude/stacks/{target}.md written"),
-                format!("PROJECT.yaml updated — {target} added to {category}"),
+                if changed {
+                    format!("PROJECT.yaml updated — {target} added to {category}")
+                } else {
+                    format!("PROJECT.yaml unchanged — {target} already listed under {category}")
+                },
             ],
         })
         .unwrap(),
     )
 }
 
-fn stack_category(name: &str) -> &'static str {
-    match name {
-        "java-21-spring-boot" | "rust-1-95-mcp" => "backend",
-        "angular-21" | "react-19" => "frontend",
-        "jpa-postgres" => "persistence",
-        "github-actions" | "pr-workflow" => "devops",
-        "cross-cutting" => "security",
-        _ => "collaboration",
-    }
+/// The first whitespace-delimited token of a YAML list entry (`    - foo  # x`
+/// → `foo`), or None if the line is not a `- ` entry. Tolerates trailing
+/// comments carried over from the PROJECT.yaml template.
+fn entry_skill(line: &str) -> Option<&str> {
+    line.trim_start()
+        .strip_prefix("- ")?
+        .split_whitespace()
+        .next()
 }
 
-fn append_to_tech_stack(yaml: String, category: &str, skill: &str) -> String {
-    // Find the category list and append the skill
-    // Looks for pattern like "  backend:\n    - existing" and appends "    - skill"
-    let search = format!("  {category}:\n");
-    if let Some(pos) = yaml.find(&search) {
-        let insert_pos = pos + search.len();
-        let new_entry = format!("    - {skill}\n");
-        let mut result = yaml.clone();
-        result.insert_str(insert_pos, &new_entry);
-        result
-    } else {
-        // Category doesn't exist yet — append it
-        format!("{yaml}\n  {category}:\n    - {skill}\n")
+/// Add `skill` under the given tech_stack `category`, preserving the file's
+/// comments and indentation. No-ops if the skill is already listed (dedup). If
+/// the category holds only the `none` placeholder, the skill replaces it.
+/// Returns the new YAML and whether anything changed.
+fn append_to_tech_stack(yaml: &str, category: &str, skill: &str) -> (String, bool) {
+    let header = format!("  {category}:");
+    let mut lines: Vec<String> = yaml.lines().map(String::from).collect();
+
+    let Some(header_idx) = lines.iter().position(|l| l.trim_end() == header) else {
+        // Category absent from the template — append a fresh block at the end.
+        let mut out = yaml.trim_end().to_string();
+        out.push_str(&format!("\n{header}\n    - {skill}\n"));
+        return (out, true);
+    };
+
+    // Collect the contiguous list entries directly under the header.
+    let mut entries = vec![];
+    let mut i = header_idx + 1;
+    while i < lines.len() && lines[i].trim_start().starts_with("- ") {
+        entries.push(i);
+        i += 1;
     }
+
+    if entries
+        .iter()
+        .any(|&idx| entry_skill(&lines[idx]) == Some(skill))
+    {
+        return (yaml.to_string(), false); // already present — dedup
+    }
+
+    if let Some(&none_idx) = entries
+        .iter()
+        .find(|&&idx| entry_skill(&lines[idx]) == Some("none"))
+    {
+        lines[none_idx] = format!("    - {skill}");
+    } else {
+        lines.insert(header_idx + 1, format!("    - {skill}"));
+    }
+
+    let mut out = lines.join("\n");
+    if yaml.ends_with('\n') {
+        out.push('\n');
+    }
+    (out, true)
 }
