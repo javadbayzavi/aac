@@ -241,11 +241,11 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
     }
 
     // FEATURE_PLAN
-    if persona == "developer" {
-        if let Ok(content) = assets::feature_plan() {
-            let _ = fs::write(claude_dir.join("protocols/FEATURE_PLAN.json"), content);
-            files_written.push(".claude/protocols/FEATURE_PLAN.json".into());
-        }
+    if persona == "developer"
+        && let Ok(content) = assets::feature_plan()
+    {
+        let _ = fs::write(claude_dir.join("protocols/FEATURE_PLAN.json"), content);
+        files_written.push(".claude/protocols/FEATURE_PLAN.json".into());
     }
 
     // Multi-agent agents — instantiate the agent set for this persona. To add
@@ -359,4 +359,30 @@ pub(crate) fn resolve_agent_template(
         result = result.replace(&placeholder, &content);
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn category_skills_returns_single_match() {
+        let out = category_skills(&v(&["rust-1-95-mcp", "cross-cutting"]), "backend");
+        assert_eq!(out, "rust-1-95-mcp");
+    }
+
+    #[test]
+    fn category_skills_defaults_to_none() {
+        assert_eq!(category_skills(&v(&["rust-1-95-mcp"]), "frontend"), "none");
+    }
+
+    #[test]
+    fn category_skills_joins_multiple_as_yaml_entries() {
+        let out = category_skills(&v(&["rust-1-95-mcp", "java-21-spring-boot"]), "backend");
+        assert_eq!(out, "rust-1-95-mcp\n    - java-21-spring-boot");
+    }
 }

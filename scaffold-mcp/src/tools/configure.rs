@@ -443,3 +443,76 @@ fn remove_from_tech_stack(yaml: &str, category: &str, skill: &str) -> (String, b
     }
     (out, true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const YAML: &str = "tech_stack:\n  backend:\n    - rust-1-95-mcp\n  frontend:\n    - none        # e.g., angular-21, react-19\n  devops:\n    - github-actions\n    - pr-workflow\n";
+
+    #[test]
+    fn entry_skill_strips_comment_and_ignores_non_entries() {
+        assert_eq!(entry_skill("    - react-19   # hint"), Some("react-19"));
+        assert_eq!(entry_skill("  backend:"), None);
+    }
+
+    #[test]
+    fn yaml_scalar_reads_value_past_comment() {
+        let y = "project:\n  mode: multi-agent    # solo | multi-agent\n";
+        assert_eq!(yaml_scalar(y, "mode"), Some("multi-agent"));
+        assert_eq!(yaml_scalar(y, "missing"), None);
+    }
+
+    #[test]
+    fn append_replaces_none_placeholder() {
+        let (out, changed) = append_to_tech_stack(YAML, "frontend", "react-19");
+        assert!(changed);
+        assert!(out.contains("    - react-19"));
+        assert!(!out.contains("- none"));
+    }
+
+    #[test]
+    fn append_dedups_already_present() {
+        let (out, changed) = append_to_tech_stack(YAML, "devops", "github-actions");
+        assert!(!changed);
+        assert_eq!(out, YAML);
+    }
+
+    #[test]
+    fn append_inserts_alongside_existing() {
+        let (out, changed) = append_to_tech_stack(YAML, "backend", "java-21-spring-boot");
+        assert!(changed);
+        assert!(out.contains("- rust-1-95-mcp"));
+        assert!(out.contains("- java-21-spring-boot"));
+    }
+
+    #[test]
+    fn append_creates_missing_category() {
+        let (out, changed) = append_to_tech_stack(YAML, "persistence", "jpa-postgres");
+        assert!(changed);
+        assert!(out.contains("  persistence:\n    - jpa-postgres"));
+    }
+
+    #[test]
+    fn remove_keeps_other_entries() {
+        let two = "tech_stack:\n  backend:\n    - rust-1-95-mcp\n    - java-21-spring-boot\n";
+        let (out, changed) = remove_from_tech_stack(two, "backend", "java-21-spring-boot");
+        assert!(changed);
+        assert!(out.contains("- rust-1-95-mcp"));
+        assert!(!out.contains("java-21-spring-boot"));
+    }
+
+    #[test]
+    fn remove_last_entry_restores_none() {
+        let (out, changed) = remove_from_tech_stack(YAML, "backend", "rust-1-95-mcp");
+        assert!(changed);
+        assert!(out.contains("  backend:\n    - none"));
+    }
+
+    #[test]
+    fn remove_absent_is_noop() {
+        let (out, changed) = remove_from_tech_stack(YAML, "backend", "angular-21");
+        assert!(!changed);
+        assert_eq!(out, YAML);
+    }
+}
