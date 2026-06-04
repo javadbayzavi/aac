@@ -248,16 +248,23 @@ async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallT
         }
     }
 
-    // Multi-agent agents
-    if mode == "multi-agent" && persona == "developer" {
+    // Multi-agent agents — instantiate the agent set for this persona. To add
+    // a new sub-agent (e.g. a PM sprint-planner), drop its template in
+    // agentic-setup/agents/ and add its name to the persona's list here.
+    if mode == "multi-agent" {
+        let agents: &[&str] = match persona.as_str() {
+            "product-manager" => &["product-manager"],
+            "designer" => &["designer"],
+            _ => &[
+                "orchestrator",
+                "product-ai-engineer",
+                "backend-developer",
+                "frontend-developer",
+                "devops-engineer",
+            ],
+        };
         let _ = fs::create_dir_all(claude_dir.join("agents"));
-        for name in &[
-            "orchestrator",
-            "product-ai-engineer",
-            "backend-developer",
-            "frontend-developer",
-            "devops-engineer",
-        ] {
+        for name in agents {
             if let Ok(template) = assets::agent_template(name) {
                 let content = resolve_agent_template(&template, &skills_injected, &project_name);
                 let _ = fs::write(
@@ -318,16 +325,33 @@ fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str)
         .replace("{{agents.devops-engineer.model}}", "claude-sonnet-4-6")
         .replace("{{agents.devops-engineer.effort}}", "medium");
 
+    // Category includes (e.g. {{include stacks/backend.md}}): inject only the
+    // skills belonging to THAT category — otherwise every directive would get
+    // the full concatenation of all skills.
     for category in &["backend", "frontend", "persistence", "devops", "security"] {
         let placeholder = format!("{{{{include stacks/{category}.md}}}}");
-        // Only inject skills that belong to THIS category — otherwise every
-        // include directive would receive the full concatenation of all skills.
+        if !result.contains(&placeholder) {
+            continue;
+        }
         let content: String = stacks
             .iter()
             .filter(|s| assets::stack_category(s) == *category)
             .filter_map(|s| assets::stack_content(s))
             .collect::<Vec<_>>()
             .join("\n\n---\n\n");
+        result = result.replace(&placeholder, &content);
+    }
+
+    // Specific-skill includes (e.g. {{include stacks/atlassian.md}} in the PM
+    // agent, {{include stacks/figma.md}} in the designer agent): inject that
+    // skill's content directly. Resolves any registered skill, so new
+    // collaboration agents work without changing this function.
+    for skill in assets::available_stacks() {
+        let placeholder = format!("{{{{include stacks/{skill}.md}}}}");
+        if !result.contains(&placeholder) {
+            continue;
+        }
+        let content = assets::stack_content(skill).unwrap_or_default();
         result = result.replace(&placeholder, &content);
     }
     result
