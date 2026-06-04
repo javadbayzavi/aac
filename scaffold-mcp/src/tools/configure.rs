@@ -15,9 +15,10 @@ use crate::server::{error_result, text_result};
 pub struct ConfigureParams {
     /// Absolute path to the target project directory
     pub project_path: String,
-    /// Operation: add-tech-stack
+    /// Operation: add-tech-stack | remove-tech-stack | add-agent | remove-agent
     pub operation: String,
-    /// Skill name to add (e.g. react-19, angular-21, atlassian, github-issues)
+    /// For tech-stack ops: the skill name (e.g. react-19, atlassian). For agent
+    /// ops: the agent name (e.g. backend-developer, product-manager).
     pub target: String,
 }
 
@@ -34,7 +35,7 @@ pub fn configure_route() -> ToolRoute<AacServer> {
     let tool = Tool::new_with_raw(
         "scaffold_configure",
         Some(std::borrow::Cow::Borrowed(
-            "Add a tech-stack skill to an already-onboarded project. Do NOT run scaffold_inspect first — go directly to this tool. Only needs project_path and target. Before calling, ask: (1) project path, (2) category via AskUserQuestion: Backend / Frontend / Persistence / DevOps / Collaboration, (3) specific skill via AskUserQuestion based on category — Backend: java-21-spring-boot, rust-1-95-mcp. Frontend: angular-21, react-19. Persistence: jpa-postgres. DevOps: github-actions, pr-workflow. Collaboration: atlassian, figma, github-issues, product, design. After calling, use AskUserQuestion: 'Add another skill' or 'Done'.",
+            "Configure an already-onboarded project. Do NOT run scaffold_inspect first — go directly to this tool. operation is one of: add-tech-stack, remove-tech-stack, add-agent, remove-agent. target is the skill name (tech-stack ops) or agent name (agent ops). Before calling, ask the user which operation, then which target via AskUserQuestion. Tech-stack skills — Backend: java-21-spring-boot, rust-1-95-mcp. Frontend: angular-21, react-19. Persistence: jpa-postgres. DevOps: github-actions, pr-workflow. Collaboration: atlassian, figma, github-issues, product, design. Agents (multi-agent projects only): orchestrator, product-ai-engineer, backend-developer, frontend-developer, devops-engineer, product-manager, designer. After calling, use AskUserQuestion: 'Make another change' or 'Done'.",
         )),
         schema_for_type::<ConfigureParams>(),
     );
@@ -63,8 +64,22 @@ async fn configure_handler(Parameters(params): Parameters<ConfigureParams>) -> C
             )
             .await
         }
+        "remove-tech-stack" => remove_tech_stack(
+            &claude_dir,
+            &project_yaml_path,
+            &params.target,
+            &params.project_path,
+        ),
+        "add-agent" => add_agent(
+            path,
+            &claude_dir,
+            &project_yaml_path,
+            &params.target,
+            &params.project_path,
+        ),
+        "remove-agent" => remove_agent(&claude_dir, &params.target, &params.project_path),
         _ => error_result(format!(
-            "Unknown operation: {}. Supported: add-tech-stack",
+            "Unknown operation: {}. Supported: add-tech-stack, remove-tech-stack, add-agent, remove-agent",
             params.operation
         )),
     }
@@ -141,6 +156,197 @@ async fn add_tech_stack(
     )
 }
 
+fn remove_tech_stack(
+    claude_dir: &Path,
+    project_yaml_path: &Path,
+    target: &str,
+    project_path: &str,
+) -> CallToolResult {
+    let stack_file = claude_dir.join("stacks").join(format!("{target}.md"));
+    let file_removed = stack_file.exists();
+    if file_removed {
+        let _ = fs::remove_file(&stack_file);
+    }
+
+    let yaml_content = match fs::read_to_string(project_yaml_path) {
+        Ok(s) => s,
+        Err(e) => return error_result(format!("Failed to read PROJECT.yaml: {e}")),
+    };
+    let category = assets::stack_category(target);
+    let (updated_yaml, removed_from_yaml) = remove_from_tech_stack(&yaml_content, category, target);
+
+    if !file_removed && !removed_from_yaml {
+        return error_result(format!("'{target}' is not configured in this project."));
+    }
+
+    if removed_from_yaml && let Err(e) = fs::write(project_yaml_path, &updated_yaml) {
+        return error_result(format!("Failed to update PROJECT.yaml: {e}"));
+    }
+
+    let mut changes = vec![];
+    if file_removed {
+        changes.push(format!(".claude/stacks/{target}.md removed"));
+    }
+    changes.push(if removed_from_yaml {
+        format!("PROJECT.yaml updated — {target} removed from {category}")
+    } else {
+        format!("PROJECT.yaml unchanged — {target} was not listed under {category}")
+    });
+    ok_result("remove-tech-stack", target, project_path, changes)
+}
+
+fn add_agent(
+    path: &Path,
+    claude_dir: &Path,
+    project_yaml_path: &Path,
+    target: &str,
+    project_path: &str,
+) -> CallToolResult {
+    let yaml = match fs::read_to_string(project_yaml_path) {
+        Ok(s) => s,
+        Err(e) => return error_result(format!("Failed to read PROJECT.yaml: {e}")),
+    };
+    if yaml_scalar(&yaml, "mode") == Some("solo") {
+        return error_result(
+            "This project is solo mode — agents are embedded in CLAUDE.md, not .claude/agents/. \
+             Re-onboard as multi-agent to use individual agent files.",
+        );
+    }
+
+    let template = match assets::agent_template(target) {
+        Ok(t) => t,
+        Err(_) => {
+            return error_result(format!(
+                "No agent template '{}'. Available: {}",
+                target,
+                assets::available_agents().join(", ")
+            ));
+        }
+    };
+
+    let project_name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let skills = injected_skills(claude_dir);
+    let content = crate::tools::onboard::resolve_agent_template(&template, &skills, &project_name);
+
+    let agents_dir = claude_dir.join("agents");
+    if let Err(e) = fs::create_dir_all(&agents_dir) {
+        return error_result(format!("Failed to create .claude/agents/: {e}"));
+    }
+    let agent_file = agents_dir.join(format!("{target}.md"));
+    let overwrote = agent_file.exists();
+    if let Err(e) = fs::write(&agent_file, content) {
+        return error_result(format!("Failed to write agent file: {e}"));
+    }
+
+    let note = if overwrote {
+        " (overwrote existing)"
+    } else {
+        ""
+    };
+    ok_result(
+        "add-agent",
+        target,
+        project_path,
+        vec![format!(".claude/agents/{target}.md written{note}")],
+    )
+}
+
+fn remove_agent(claude_dir: &Path, target: &str, project_path: &str) -> CallToolResult {
+    let agent_file = claude_dir.join("agents").join(format!("{target}.md"));
+    if !agent_file.exists() {
+        let current = injected_agents(claude_dir);
+        let listed = if current.is_empty() {
+            "none".to_string()
+        } else {
+            current.join(", ")
+        };
+        return error_result(format!(
+            "No agent '{target}' in this project. Current agents: {listed}"
+        ));
+    }
+    if let Err(e) = fs::remove_file(&agent_file) {
+        return error_result(format!("Failed to remove agent file: {e}"));
+    }
+    ok_result(
+        "remove-agent",
+        target,
+        project_path,
+        vec![format!(".claude/agents/{target}.md removed")],
+    )
+}
+
+/// Skill names currently injected into the project — the basenames of the
+/// `.md` files in `.claude/stacks/`. Used to resolve agent template includes.
+fn injected_skills(claude_dir: &Path) -> Vec<String> {
+    let dir = claude_dir.join("stacks");
+    fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_suffix(".md").map(String::from)
+        })
+        .collect()
+}
+
+/// Agent names currently defined in the project — basenames of `.md` files in
+/// `.claude/agents/`.
+fn injected_agents(claude_dir: &Path) -> Vec<String> {
+    let dir = claude_dir.join("agents");
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_suffix(".md").map(String::from)
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// Read a top-level scalar value from PROJECT.yaml (e.g. `mode: multi-agent`),
+/// tolerating trailing `# comments`. Returns the first whitespace-delimited
+/// token of the value.
+fn yaml_scalar<'a>(yaml: &'a str, key: &str) -> Option<&'a str> {
+    yaml.lines().find_map(|line| {
+        line.trim_start()
+            .strip_prefix(key)?
+            .strip_prefix(':')?
+            .split('#')
+            .next()?
+            .split_whitespace()
+            .next()
+    })
+}
+
+fn ok_result(
+    operation: &str,
+    target: &str,
+    project_path: &str,
+    changes: Vec<String>,
+) -> CallToolResult {
+    text_result(
+        serde_json::to_string_pretty(&ConfigureResult {
+            project_path: project_path.to_string(),
+            operation: operation.to_string(),
+            target: target.to_string(),
+            next_steps: vec![
+                "Call scaffold_configure again to make another change".to_string(),
+                "Done — open the project in Claude Code".to_string(),
+            ],
+            changes,
+        })
+        .unwrap(),
+    )
+}
+
 /// The first whitespace-delimited token of a YAML list entry (`    - foo  # x`
 /// → `foo`), or None if the line is not a `- ` entry. Tolerates trailing
 /// comments carried over from the PROJECT.yaml template.
@@ -188,6 +394,47 @@ fn append_to_tech_stack(yaml: &str, category: &str, skill: &str) -> (String, boo
         lines[none_idx] = format!("    - {skill}");
     } else {
         lines.insert(header_idx + 1, format!("    - {skill}"));
+    }
+
+    let mut out = lines.join("\n");
+    if yaml.ends_with('\n') {
+        out.push('\n');
+    }
+    (out, true)
+}
+
+/// Remove `skill` from the given tech_stack `category`, preserving comments and
+/// indentation. If the category empties out, restore the `none` placeholder so
+/// the file stays well-formed. Returns the new YAML and whether anything changed.
+fn remove_from_tech_stack(yaml: &str, category: &str, skill: &str) -> (String, bool) {
+    let header = format!("  {category}:");
+    let mut lines: Vec<String> = yaml.lines().map(String::from).collect();
+
+    let Some(header_idx) = lines.iter().position(|l| l.trim_end() == header) else {
+        return (yaml.to_string(), false);
+    };
+
+    let mut entries = vec![];
+    let mut i = header_idx + 1;
+    while i < lines.len() && lines[i].trim_start().starts_with("- ") {
+        entries.push(i);
+        i += 1;
+    }
+
+    let Some(&target_idx) = entries
+        .iter()
+        .find(|&&idx| entry_skill(&lines[idx]) == Some(skill))
+    else {
+        return (yaml.to_string(), false);
+    };
+    lines.remove(target_idx);
+
+    // If the category now has no entries, restore the `none` placeholder.
+    let still_has_entry = lines
+        .get(header_idx + 1)
+        .is_some_and(|l| l.trim_start().starts_with("- "));
+    if !still_has_entry {
+        lines.insert(header_idx + 1, "    - none".to_string());
     }
 
     let mut out = lines.join("\n");

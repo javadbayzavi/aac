@@ -315,7 +315,11 @@ fn category_skills(skills: &[String], category: &str) -> String {
     }
 }
 
-fn resolve_agent_template(template: &str, stacks: &[String], project_name: &str) -> String {
+pub(crate) fn resolve_agent_template(
+    template: &str,
+    stacks: &[String],
+    project_name: &str,
+) -> String {
     let mut result = template
         .replace("{{project.name}}", project_name)
         .replace("{{agents.backend-developer.model}}", "claude-opus-4-8")

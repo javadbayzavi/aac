@@ -127,6 +127,24 @@ pub fn agent_template(name: &str) -> Result<String, String> {
     read(&format!("agents/{name}.template.md"))
 }
 
+/// Agent template names available in the synced repo — basenames of
+/// `agents/*.template.md`. Discovered from the filesystem so newly added
+/// templates appear without code changes.
+pub fn available_agents() -> Vec<String> {
+    let dir = agentic_setup_dir().join("agents");
+    let mut names: Vec<String> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_suffix(".template.md").map(String::from)
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 pub fn project_yaml_template() -> Result<String, String> {
     read("PROJECT.yaml")
 }
