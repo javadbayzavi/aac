@@ -42,6 +42,10 @@ pub fn onboard_route() -> ToolRoute<AacServer> {
 }
 
 async fn onboard_handler(Parameters(params): Parameters<OnboardParams>) -> CallToolResult {
+    if !assets::is_ready() {
+        return error_result(assets::NOT_READY_MSG);
+    }
+
     let path = Path::new(&params.project_path);
     let claude_dir = path.join(".claude");
     let inspection_path = claude_dir.join("inspection.json");

@@ -8,6 +8,18 @@ pub fn read(relative_path: &str) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {e}", path.display()))
 }
 
+/// Message shown when a tool needs templates but the synced repo isn't ready.
+pub const NOT_READY_MSG: &str = "Templates aren't available yet. The server clones them from GitHub into ~/.scaffold/repo/ on startup. If this is the first run it may still be downloading — wait a few seconds and try again. If it persists, check your network connection.";
+
+/// Whether the synced template repo is present and usable. `PROJECT.yaml` is
+/// checked out near the end of a clone, so its presence is a good proxy for
+/// "the synced repo finished cloning and is readable". Tools that read
+/// templates check this first to give a clear message instead of a raw
+/// file-read error during the first-run (or offline) window.
+pub fn is_ready() -> bool {
+    agentic_setup_dir().join("PROJECT.yaml").is_file()
+}
+
 pub fn claude_template(persona: &str, mode: &str) -> Result<String, String> {
     let file = match (persona, mode) {
         ("product-manager", _) => "CLAUDE.pm-solo-template.md",

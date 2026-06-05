@@ -92,6 +92,10 @@ async fn add_tech_stack(
     target: &str,
     project_path: &str,
 ) -> CallToolResult {
+    if !assets::is_ready() {
+        return error_result(assets::NOT_READY_MSG);
+    }
+
     // Resolve stack content from bundle
     let content = match assets::stack_content(target) {
         Some(c) => c,
@@ -202,6 +206,10 @@ fn add_agent(
     target: &str,
     project_path: &str,
 ) -> CallToolResult {
+    if !assets::is_ready() {
+        return error_result(assets::NOT_READY_MSG);
+    }
+
     let yaml = match fs::read_to_string(project_yaml_path) {
         Ok(s) => s,
         Err(e) => return error_result(format!("Failed to read PROJECT.yaml: {e}")),
