@@ -158,7 +158,7 @@ Update `status: claude_md_pending` in `PROJECT.yaml`.
    - `developer` + `solo` → `agentic-setup/CLAUDE.solo-template.md`
    - `developer` + `multi-agent` → `agentic-setup/CLAUDE-multi-agent-template.md`
    - `product-manager` + any mode → `agentic-setup/CLAUDE.pm-solo-template.md`
-   - `designer` + any mode → `agentic-setup/CLAUDE.designer-solo-template.md` (not yet created)
+   - `designer` + any mode → `agentic-setup/CLAUDE.designer-solo-template.md`
 
 3. Substitute:
    - `{{project.name}}` → project name

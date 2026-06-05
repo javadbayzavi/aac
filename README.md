@@ -6,7 +6,7 @@ Reusable framework that onboards any project into an agentic development workflo
 
 ## Two Ways to Scaffold
 
-This repo provides two entry points that produce the same output.
+This repo provides two entry points to the same Inspector → Onboarding → Configurator workflow, producing an equivalent setup. The MCP server is the primary path; opening the repo directly in Claude Code is a no-binary fallback. (Minor differences exist in the generated `PROJECT.yaml` metadata.)
 
 ### Option 1 — MCP Server
 
